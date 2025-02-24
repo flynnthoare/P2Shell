@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <pwd.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "lab.h"
 
 
@@ -18,11 +21,11 @@
 * @return const char* The prompt
 */
 char *get_prompt(const char *env) {
-    printf("get_prompt() called\n");
+    
     if (env) {
         return strdup(env);
     }
-    return strdup("shell> ");  // Return a dummy prompt
+    return strdup("shell> ");  // Return default prompt
 }
 
 /**
@@ -35,8 +38,32 @@ char *get_prompt(const char *env) {
 * errno is set to indicate the error.
 */
 int change_dir(char **dir) {
-    printf("change_dir() called\n");
-    return 0;  // Always return success
+
+    char *directory = NULL;
+
+    // If no directory argument provided, go to the home directory
+    if (dir == NULL || *dir == NULL) {
+        directory = getenv("HOME");  // Try to get from HOME environment variable
+        if (directory == NULL) {
+            struct passwd *pw = getpwuid(getuid());  // Get user's home directory
+            if (pw != NULL) {
+                directory = pw->pw_dir;
+            } else {
+                fprintf(stderr, "cd: Could not find home directory.\n");
+                return -1;
+            }
+        }
+    }
+    else {
+        directory = *dir;
+    }
+
+    // Attempt to change the directory
+    if (chdir(directory) != 0) {
+        return -1;
+    }
+    
+    return 0;   // return success
 }
 
 /**
@@ -50,8 +77,7 @@ int change_dir(char **dir) {
 * @return The line read in a format suitable for exec
 */
 char **cmd_parse(const char *line) {
-    printf("cmd_parse() called\n");
-
+    
     // copy user input so we can also access the original string
     char *input = strdup(line);
     //check for failed malloc
@@ -61,7 +87,8 @@ char **cmd_parse(const char *line) {
     }
     
     // points to an array of memory addresses (each of those addresses points to a string)
-    char **args = malloc(64 * sizeof(char *));  // allocate memory for 64 args
+    long arg_max = sysconf(_SC_ARG_MAX);
+    char **args = malloc(arg_max * sizeof(char *));  // allocate memory for 64 args
     // check for failed malloc
     if (!args) {
         fprintf(stderr, "Memory allocation failed for arguments array.\n");
@@ -76,6 +103,17 @@ char **cmd_parse(const char *line) {
     while (token != NULL) {
         args[position++] = strdup(token);   // copy tokens to args array
         token = strtok(NULL, " ");          // sets token to next token in input
+    }
+
+    //handle if too many args
+    if (position >= arg_max - 1) {
+        fprintf(stderr, "Too many arguments (limit reached)\n");
+        for (int i = 0; i < position; i++) {
+            free(args[i]);
+        }
+        free(args);
+        free(input);
+        return NULL;
     }
     // add NULL termination to args list
     args[position] = NULL;
@@ -108,8 +146,35 @@ void cmd_free(char **line) {
 * @return The new line with no whitespace
 */
 char *trim_white(char *line) {
-    printf("trim_white() called\n");
-    return line;  // Return input unmodified
+    char *start = line;
+    char *end;
+
+    // Trim leading whitespace
+    while (isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    // If the string is entirely spaces
+    if (*start == '\0') {
+        // Empty string, return a new empty allocation
+        char *empty_str = strdup("");
+        free(line);  // Free the original line since readline() allocates it
+        return empty_str;
+    }
+
+    // Trim trailing whitespace
+    end = start + strlen(start) - 1;
+    while (end > start && isspace((unsigned char)*end)) {
+        end--;
+    }
+
+    // Add a null terminator after the last non-space character
+    *(end + 1) = '\0';
+
+    // If leading spaces were removed, allocate new memory
+    char *trimmed = strdup(start);
+    free(line);  // Free the original line since readline() allocates it
+    return trimmed;
 }
 
 /**
@@ -124,7 +189,50 @@ char *trim_white(char *line) {
 * @return True if the command was a built in command
 */
 bool do_builtin(struct shell *sh, char **argv) {
-    printf("do_builtin() called\n");
+
+    if (argv[0] == NULL) {
+        return false;
+    }
+
+    //exit
+    if (strcmp(argv[0], "exit") == 0) {
+        printf("Exiting shell normally.\n");
+        
+        //free resources then exit
+        sh_destroy(sh);
+        exit(0);    // dont need to return anything since program terminated
+    }
+
+    //cd
+    if (strcmp(argv[0], "cd") == 0) {
+        if (argv[2] != NULL) {
+            fprintf(stderr, "cd: too many arguments\n");
+            return true;
+        }
+        
+        // Call change_dir() with argv[1] (can be NULL if no argument is provided)
+        if (change_dir(&argv[1]) != 0) {
+            fprintf(stderr, "cd: Error changing directory\n");
+        }
+        
+        return true;  // Built-in command handled
+    }
+
+    //history
+    if (strcmp(argv[0], "history") == 0) {
+        HIST_ENTRY **history_entries = history_list();  // Get the history list
+        if (history_entries) {
+            int i = 0;
+            while (history_entries[i] != NULL) {
+                printf("%d: %s\n", i + 1, history_entries[i]->line);
+                i++;
+            }
+        } else {
+            printf("No command history available.\n");
+        }
+        return true;
+    }
+
     return false;  // Always return false
 }
 
@@ -139,7 +247,6 @@ bool do_builtin(struct shell *sh, char **argv) {
 * @param sh
 */
 void sh_init(struct shell *sh) {
-    printf("sh_init() called\n");
 
     sh->shell_terminal = STDIN_FILENO;  // standard input (keyboard input)
     sh->shell_is_interactive = isatty(sh->shell_terminal);
@@ -167,6 +274,9 @@ void sh_init(struct shell *sh) {
         }   
     }
 
+    // Initialize the command history feature
+    using_history();
+
     //set up shell prompt
     sh->prompt = get_prompt(getenv("MY_PROMPT"));
 
@@ -179,7 +289,6 @@ void sh_init(struct shell *sh) {
 * @param sh
 */
 void sh_destroy(struct shell *sh) {
-    printf("sh_destroy() called\n");
 
     // Free memory for the prompt
     if (sh->prompt) {
@@ -192,6 +301,7 @@ void sh_destroy(struct shell *sh) {
             perror("Failed to restore terminal settings");
         }
     }
+    clear_history();
 }
 
 
