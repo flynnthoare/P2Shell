@@ -21,11 +21,12 @@
 * @return const char* The prompt
 */
 char *get_prompt(const char *env) {
-    
-    if (env) {
-        return strdup(env);
+    char *prompt = getenv(env);
+
+    if (prompt) {
+        return strdup(prompt);
     }
-    return strdup("shell> ");  // Return default prompt
+    return strdup("shell>");  // Return default prompt
 }
 
 /**
@@ -146,35 +147,26 @@ void cmd_free(char **line) {
 * @return The new line with no whitespace
 */
 char *trim_white(char *line) {
+    if (!line) return NULL;  // If input is NULL, return NULL
+
     char *start = line;
-    char *end;
+    while (isspace((unsigned char)*start)) start++; // Move past leading spaces
 
-    // Trim leading whitespace
-    while (isspace((unsigned char)*start)) {
-        start++;
+    if (*start == '\0') { 
+        *line = '\0'; // If all spaces, modify `line` to be empty
+        return line;
     }
 
-    // If the string is entirely spaces
-    if (*start == '\0') {
-        // Empty string, return a new empty allocation
-        char *empty_str = strdup("");
-        free(line);  // Free the original line since readline() allocates it
-        return empty_str;
+    char *end = start + strlen(start) - 1;
+    while (end > start && isspace((unsigned char)*end)) end--; // Move back past trailing spaces
+
+    *(end + 1) = '\0';  // Null-terminate after last non-space character
+
+    if (start != line) {
+        memmove(line, start, end - start + 2);  // Shift the trimmed string in place
     }
 
-    // Trim trailing whitespace
-    end = start + strlen(start) - 1;
-    while (end > start && isspace((unsigned char)*end)) {
-        end--;
-    }
-
-    // Add a null terminator after the last non-space character
-    *(end + 1) = '\0';
-
-    // If leading spaces were removed, allocate new memory
-    char *trimmed = strdup(start);
-    free(line);  // Free the original line since readline() allocates it
-    return trimmed;
+    return line;
 }
 
 /**
