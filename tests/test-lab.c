@@ -159,6 +159,77 @@ void test_ch_dir_root(void)
      cmd_free(cmd);
 }
 
+void test_cmd_parse_empty(void)
+{
+     char **rval = cmd_parse("");
+     TEST_ASSERT_NULL(rval);
+}
+
+void test_cmd_parse_only_spaces(void)
+{
+     char **rval = cmd_parse("    ");
+     TEST_ASSERT_NULL(rval);
+}
+
+void test_cmd_parse_multiple_spaces(void)
+{
+     char **rval = cmd_parse("ls    -l    -a");
+     TEST_ASSERT_TRUE(rval);
+     TEST_ASSERT_EQUAL_STRING("ls", rval[0]);
+     TEST_ASSERT_EQUAL_STRING("-l", rval[1]);
+     TEST_ASSERT_EQUAL_STRING("-a", rval[2]);
+     TEST_ASSERT_NULL(rval[3]);
+     cmd_free(rval);
+}
+
+void test_cmd_parse_special_chars(void)
+{
+     char **rval = cmd_parse("echo hello > file.txt");
+     TEST_ASSERT_TRUE(rval);
+     TEST_ASSERT_EQUAL_STRING("echo", rval[0]);
+     TEST_ASSERT_EQUAL_STRING("hello", rval[1]);
+     TEST_ASSERT_EQUAL_STRING(">", rval[2]);
+     TEST_ASSERT_EQUAL_STRING("file.txt", rval[3]);
+     TEST_ASSERT_NULL(rval[4]);
+     cmd_free(rval);
+}
+
+void test_trim_white_newlines_tabs(void)
+{
+     char *line = (char*) calloc(20, sizeof(char));
+     strncpy(line, "\t\n  ls -a \n\t", 20);
+     char *rval = trim_white(line);
+     TEST_ASSERT_EQUAL_STRING("ls -a", rval);
+     free(line);
+}
+
+void test_get_prompt_undefined(void)
+{
+     unsetenv("MY_PROMPT");
+     char *prompt = get_prompt("MY_PROMPT");
+     TEST_ASSERT_EQUAL_STRING("shell>", prompt);
+     free(prompt);
+}
+
+void test_ch_dir_non_existent(void)
+{
+     char *line = (char*) calloc(30, sizeof(char));
+     strncpy(line, "cd /thisdoesnotexist", 30);
+     char **cmd = cmd_parse(line);
+
+     char *before = getcwd(NULL, 0);
+     int result = change_dir(cmd);
+     char *after = getcwd(NULL, 0);
+
+     TEST_ASSERT_EQUAL_INT(-1, result);  // Should return failure
+     TEST_ASSERT_EQUAL_STRING(before, after);  // Directory should NOT change
+
+     free(line);
+     free(before);
+     free(after);
+     cmd_free(cmd);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_cmd_parse);
@@ -173,6 +244,14 @@ int main(void) {
   RUN_TEST(test_get_prompt_custom);
   RUN_TEST(test_ch_dir_home);
   RUN_TEST(test_ch_dir_root);
+  RUN_TEST(test_cmd_parse_empty);
+  RUN_TEST(test_cmd_parse_only_spaces);
+  RUN_TEST(test_cmd_parse_multiple_spaces);
+  RUN_TEST(test_cmd_parse_special_chars);
+  RUN_TEST(test_trim_white_newlines_tabs);
+  RUN_TEST(test_get_prompt_undefined);
+  RUN_TEST(test_ch_dir_non_existent);
+  
 
   return UNITY_END();
 }
