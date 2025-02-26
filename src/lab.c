@@ -45,33 +45,34 @@ char *get_prompt(const char *env) {
 * errno is set to indicate the error.
 */
 int change_dir(char **dir) {
+
     char *directory = NULL;
 
-    // If no arguments, go to HOME
-    if (!dir || !dir[0] || (strcmp(dir[0], "cd") == 0 && !dir[1])) {
-        directory = getenv("HOME");  // $HOME if no argument is provided
-        if (!directory) {
-            struct passwd *pw = getpwuid(getuid());
-            if (pw) {
+    // If no dir arg provided, go to home 
+    if (dir == NULL || *dir == NULL) {
+        directory = getenv("HOME");  // Get dir from env var
+        if (directory == NULL) {
+            struct passwd *pw = getpwuid(getuid());  // Get user's home dir
+            if (pw != NULL) {
                 directory = pw->pw_dir;
             } else {
                 fprintf(stderr, "cd: Could not find home directory.\n");
                 return -1;
             }
         }
-    } else {
-        // Otherwise, use the provided dir arg
-        directory = dir[1];  
+    }
+    else {
+        directory = *dir;
     }
 
-    // Attempt to change directory
+    // Attempt to change the directory
     if (chdir(directory) != 0) {
-        perror("DEBUG: chdir failed");
         return -1;
     }
-
-    return 0;
+    
+    return 0;   // return success
 }
+
 
 /**
 * @brief Convert line read from the user into to format that will work with
@@ -85,13 +86,13 @@ int change_dir(char **dir) {
 */
 char **cmd_parse(const char *line) {
     
-    // copy user input so we can also access the original string
-    char *input = strdup(line);
-
     if (!line) {
         fprintf(stderr, "cmd_parse: Received NULL input\n");
         return NULL;
     }
+
+    // copy user input so we can also access the original string
+    char *input = strdup(line);
 
     //check for failed malloc
     if (!input) {
@@ -170,23 +171,23 @@ void cmd_free(char **line) {
 * @return The new line with no whitespace
 */
 char *trim_white(char *line) {
-    if (!line) return NULL;  // If input is NULL, return NULL
+    if (!line) return NULL;  // NULL check
 
     char *start = line;
     while (isspace((unsigned char)*start)) start++; // Move past leading spaces
 
     if (*start == '\0') { 
-        *line = '\0'; // If all spaces, modify `line` to be empty
+        *line = '\0'; // If all spaces
         return line;
     }
 
     char *end = start + strlen(start) - 1;
     while (end > start && isspace((unsigned char)*end)) end--; // Move back past trailing spaces
 
-    *(end + 1) = '\0';  // Null-terminate after last non-space character
+    *(end + 1) = '\0';  // Null-terminate after last char (thats not a space)
 
     if (start != line) {
-        memmove(line, start, end - start + 2);  // Shift the trimmed string in place
+        memmove(line, start, end - start + 2);  // Shift trimmed string in place
     }
 
     return line;
@@ -248,7 +249,7 @@ bool do_builtin(struct shell *sh, char **argv) {
         return true;
     }
 
-    return false;  // Always return false
+    return false;  // Always return false if not built in
 }
 
 /**
@@ -288,7 +289,7 @@ void sh_init(struct shell *sh) {
             exit(1);
         }   
 
-        // **IGNORE SIGNALS IN PARENT SHELL**
+        // IGNORE SIGNALS
         signal(SIGINT, SIG_IGN);   // Ignore Ctrl+C
         signal(SIGQUIT, SIG_IGN);  // Ignore Ctrl+'\'
         signal(SIGTSTP, SIG_IGN);  // Ignore Ctrl+Z
