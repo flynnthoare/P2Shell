@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
 #include <pwd.h>
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -21,6 +22,11 @@
 * @return const char* The prompt
 */
 char *get_prompt(const char *env) {
+    if (env == NULL) {  
+        printf("DEBUG: get_prompt() received NULL env, returning default prompt\n");
+        return strdup("shell>");  
+    }
+    
     char *prompt = getenv(env);
 
     if (prompt) {
@@ -39,32 +45,32 @@ char *get_prompt(const char *env) {
 * errno is set to indicate the error.
 */
 int change_dir(char **dir) {
-
     char *directory = NULL;
 
-    // If no directory argument provided, go to the home directory
-    if (dir == NULL || *dir == NULL) {
-        directory = getenv("HOME");  // Try to get from HOME environment variable
-        if (directory == NULL) {
-            struct passwd *pw = getpwuid(getuid());  // Get user's home directory
-            if (pw != NULL) {
+    // If no arguments, go to HOME
+    if (!dir || !dir[0] || (strcmp(dir[0], "cd") == 0 && !dir[1])) {
+        directory = getenv("HOME");  // $HOME if no argument is provided
+        if (!directory) {
+            struct passwd *pw = getpwuid(getuid());
+            if (pw) {
                 directory = pw->pw_dir;
             } else {
                 fprintf(stderr, "cd: Could not find home directory.\n");
                 return -1;
             }
         }
-    }
-    else {
-        directory = *dir;
+    } else {
+        // Otherwise, use the provided dir arg
+        directory = dir[1];  
     }
 
-    // Attempt to change the directory
+    // Attempt to change directory
     if (chdir(directory) != 0) {
+        perror("DEBUG: chdir failed");
         return -1;
     }
-    
-    return 0;   // return success
+
+    return 0;
 }
 
 /**
@@ -81,6 +87,12 @@ char **cmd_parse(const char *line) {
     
     // copy user input so we can also access the original string
     char *input = strdup(line);
+
+    if (!line) {
+        fprintf(stderr, "cmd_parse: Received NULL input\n");
+        return NULL;
+    }
+
     //check for failed malloc
     if (!input) {
         fprintf(stderr, "Memory allocation failed for input.\n");
@@ -90,6 +102,7 @@ char **cmd_parse(const char *line) {
     // points to an array of memory addresses (each of those addresses points to a string)
     long arg_max = sysconf(_SC_ARG_MAX);
     char **args = malloc(arg_max * sizeof(char *));  // allocate memory for 64 args
+    
     // check for failed malloc
     if (!args) {
         fprintf(stderr, "Memory allocation failed for arguments array.\n");
@@ -116,6 +129,14 @@ char **cmd_parse(const char *line) {
         free(input);
         return NULL;
     }
+
+    if (position == 0) {  // If no arguments were found
+        fprintf(stderr, "cmd_parse: No args found.\n");
+        free(input);
+        free(args);
+        return NULL;  
+    }
+
     // add NULL termination to args list
     args[position] = NULL;
 
@@ -129,6 +150,8 @@ char **cmd_parse(const char *line) {
 * @param line the line to free
 */
 void cmd_free(char **line) {
+    if (!line) return;
+    
     int i = 0;
     while (line[i] != NULL) {
         free(line[i]);
@@ -182,7 +205,7 @@ char *trim_white(char *line) {
 */
 bool do_builtin(struct shell *sh, char **argv) {
 
-    if (argv[0] == NULL) {
+    if (!argv || !argv[0]) {
         return false;
     }
 
@@ -197,13 +220,13 @@ bool do_builtin(struct shell *sh, char **argv) {
 
     //cd
     if (strcmp(argv[0], "cd") == 0) {
-        if (argv[2] != NULL) {
+        if (argv[1] != NULL && argv[2] != NULL) {
             fprintf(stderr, "cd: too many arguments\n");
             return true;
         }
         
         // Call change_dir() with argv[1] (can be NULL if no argument is provided)
-        if (change_dir(&argv[1]) != 0) {
+        if (change_dir(argv[1] ? &argv[1] : NULL) != 0) {
             fprintf(stderr, "cd: Error changing directory\n");
         }
         
@@ -264,7 +287,26 @@ void sh_init(struct shell *sh) {
             perror("Failed to get terminal attributes");
             exit(1);
         }   
+
+        // **IGNORE SIGNALS IN PARENT SHELL**
+        signal(SIGINT, SIG_IGN);   // Ignore Ctrl+C
+        signal(SIGQUIT, SIG_IGN);  // Ignore Ctrl+'\'
+        signal(SIGTSTP, SIG_IGN);  // Ignore Ctrl+Z
+        signal(SIGTTIN, SIG_IGN);  // Ignore background process input
+        signal(SIGTTOU, SIG_IGN);  // Ignore background process output
+
     }
+
+    // Force the shell to start in $HOME
+    // char *home = getenv("HOME");
+    // if (home) {
+    //     chdir(home);
+    // } else {
+    //     struct passwd *pw = getpwuid(getuid());
+    //     if (pw && pw->pw_dir) {
+    //         chdir(pw->pw_dir);
+    //     }
+    // }
 
     // Initialize the command history feature
     using_history();
