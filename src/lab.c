@@ -26,10 +26,10 @@ char *get_prompt(const char *env) {
         return strdup("shell>");  
     }
     
-    char *prompt = getenv(env);
+    char *prompt = getenv(env);     // we make a copy of this because content can be corrupted when getenv called again
 
     if (prompt) {
-        return strdup(prompt);
+        return strdup(prompt);  
     }
     return strdup("shell>");  // Return default prompt
 }
@@ -113,7 +113,7 @@ char **cmd_parse(const char *line) {
     int position = 0;
     
     // break input into tokens using delimiter (space)
-    char *token = strtok(input, " ");
+    char *token = strtok(input, " ");               // use strtok_r for thread safe version
     while (token != NULL) {
         args[position++] = strdup(token);   // copy tokens to args array
         token = strtok(NULL, " ");          // sets token to next token in input
