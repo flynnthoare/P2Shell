@@ -23,7 +23,6 @@
 */
 char *get_prompt(const char *env) {
     if (env == NULL) {  
-        printf("DEBUG: get_prompt() received NULL env, returning default prompt\n");
         return strdup("shell>");  
     }
     
