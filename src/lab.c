@@ -297,17 +297,6 @@ void sh_init(struct shell *sh) {
 
     }
 
-    // Force the shell to start in $HOME
-    // char *home = getenv("HOME");
-    // if (home) {
-    //     chdir(home);
-    // } else {
-    //     struct passwd *pw = getpwuid(getuid());
-    //     if (pw && pw->pw_dir) {
-    //         chdir(pw->pw_dir);
-    //     }
-    // }
-
     // Initialize the command history feature
     using_history();
 
