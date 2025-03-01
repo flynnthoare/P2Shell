@@ -43,33 +43,23 @@ char *get_prompt(const char *env) {
 * @return  On success, zero is returned.  On error, -1 is returned, and
 * errno is set to indicate the error.
 */
+//Simplified change_dir function to fix failing tests post code review
 int change_dir(char **dir) {
-
-    char *directory = NULL;
-
-    // If no dir arg provided, go to home 
-    if (dir == NULL || *dir == NULL) {
-        directory = getenv("HOME");  // Get dir from env var
-        if (directory == NULL) {
-            struct passwd *pw = getpwuid(getuid());  // Get user's home dir
-            if (pw != NULL) {
-                directory = pw->pw_dir;
-            } else {
-                fprintf(stderr, "cd: Could not find home directory.\n");
-                return -1;
-            }
+    if (!dir[1] || !dir) {
+        // Retrieve the home directory of user
+        struct passwd *pw = getpwuid(getuid());
+        
+        if (!pw || !pw->pw_dir) {
+            perror("getpwuid"); 
+            return -1; 
         }
-    }
-    else {
-        directory = *dir;
-    }
-
-    // Attempt to change the directory
-    if (chdir(directory) != 0) {
-        return -1;
+        
+        // Change to the user's home directory
+        return chdir(pw->pw_dir);
     }
     
-    return 0;   // return success
+    // Change to the specified directory
+    return chdir(dir[1]);
 }
 
 
@@ -206,6 +196,7 @@ char *trim_white(char *line) {
 bool do_builtin(struct shell *sh, char **argv) {
 
     if (!argv || !argv[0]) {
+        cmd_free(argv);
         return false;
     }
 
@@ -218,19 +209,14 @@ bool do_builtin(struct shell *sh, char **argv) {
         exit(0);    // dont need to return anything since program terminated
     }
 
+    
     //cd
     if (strcmp(argv[0], "cd") == 0) {
-        if (argv[1] != NULL && argv[2] != NULL) {
-            fprintf(stderr, "cd: too many arguments\n");
-            return true;
+        if (change_dir(argv) != 0) {        //edited to simplify post codereview
+            return false;
         }
-        
-        // Call change_dir() with argv[1] (can be NULL if no argument is provided)
-        if (change_dir(argv[1] ? &argv[1] : NULL) != 0) {
-            fprintf(stderr, "cd: Error changing directory\n");
-        }
-        
-        return true;  // Built-in command handled
+
+        return true;
     }
 
     //history
