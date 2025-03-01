@@ -330,7 +330,7 @@ void parse_args(int argc, char **argv) {
                 printf("Shell Version: %d.%d\n", lab_VERSION_MAJOR, lab_VERSION_MINOR);
                 exit(0);
             case '?':   //unknown option
-                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                fprintf(stderr, "Unknown option\n", opt);
                 exit(1);    
         }
     }
